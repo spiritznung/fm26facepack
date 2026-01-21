@@ -2,14 +2,18 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>FM2026 HQ Tool - Stability Fix</title>
+    <title>FM2026 HQ Portrait Tool - GitHub Version</title>
+    <script src="https://cdn.jsdelivr.net/gh/gzuidhof/coi-serviceworker@latest/coi-serviceworker.min.js"></script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/bundle.js" onerror="console.error('AI Library Load Failed')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/bundle.js"></script>
     <style>
         body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
         .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
         canvas { border-radius: 35px; background: transparent; image-rendering: -webkit-optimize-contrast; }
+        .cropper-view-box, .cropper-face { border-radius: 0; }
+        input[type="range"] { accent-color: #22c55e; height: 6px; }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #22c55e; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -18,15 +22,15 @@
 
     <div class="glass-panel w-80 p-6 rounded-2xl flex flex-col gap-4 overflow-y-auto">
         <div class="text-center mb-2">
-            <h1 class="text-2xl font-black text-green-500 italic">FM2026 HQ</h1>
-            <p id="libStatus" class="text-[10px] text-red-400 mt-1 uppercase font-bold text-center">AI 로딩 확인 중...</p>
+            <h1 class="text-2xl font-black text-green-500 italic uppercase">FM2026 HQ</h1>
+            <p id="libStatus" class="text-[10px] text-yellow-400 mt-1 uppercase font-bold text-center">Engine Initializing...</p>
         </div>
 
         <div class="space-y-3">
             <input type="file" id="fileInput" class="hidden" accept="image/*" multiple>
-            <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition-all text-sm shadow-lg">1. 사진 불러오기</button>
+            <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold text-sm shadow-lg">1. 사진 불러오기</button>
             
-            <button id="removeBgBtn" class="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-bold transition-all text-sm flex justify-center items-center gap-2">
+            <button id="removeBgBtn" class="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-bold text-sm flex justify-center items-center gap-2">
                 <span id="btnText">2. 배경 제거 (AI)</span>
                 <div id="loadingSpinner" class="loader hidden"></div>
             </button>
@@ -38,14 +42,14 @@
 
         <div class="space-y-4 pt-2">
             <div><label class="flex justify-between text-[11px] font-bold mb-1"><span>밝기</span><span id="v-bright">100%</span></label><input type="range" id="bright" min="50" max="150" value="100" class="w-full"></div>
-            <div><label class="flex justify-between text-[11px] font-bold mb-1 text-green-400"><span>선명도</span><span id="v-sharpen">0%</span></label><input type="range" id="sharpen" min="0" max="100" value="0" class="w-full"></div>
+            <div><label class="flex justify-between text-[11px] font-bold mb-1 text-green-400"><span>선명도 (HD)</span><span id="v-sharpen">0%</span></label><input type="range" id="sharpen" min="0" max="100" value="0" class="w-full"></div>
         </div>
 
         <button id="nextBtn" class="mt-auto bg-green-600 hover:bg-green-700 py-4 rounded-xl font-black text-lg shadow-xl">저장 및 다음</button>
     </div>
 
     <div class="flex-1 flex flex-col md:flex-row items-center justify-around glass-panel rounded-3xl p-8 gap-8">
-        <div id="cropWrapper" class="w-full max-w-lg aspect-square bg-black/50 rounded-xl overflow-hidden shadow-2xl border border-gray-800 flex items-center justify-center text-gray-500 italic">사진을 선택해주세요.</div>
+        <div id="cropWrapper" class="w-full max-w-lg aspect-square bg-black/50 rounded-xl overflow-hidden shadow-2xl border border-gray-800 flex items-center justify-center text-gray-500 italic">이미지를 선택하세요.</div>
         <canvas id="outCanvas" width="260" height="310"></canvas>
     </div>
 
@@ -61,16 +65,19 @@
         let cropper;
         let currentRawFile;
 
-        // 라이브러리 로드 체크
-        window.onload = () => {
-            const status = document.getElementById('libStatus');
-            if (typeof imglyRemoveBackground !== 'undefined') {
-                status.innerText = "AI ENGINE ONLINE";
-                status.classList.replace('text-red-400', 'text-green-500');
-            } else {
-                status.innerText = "AI ENGINE OFFLINE (브라우저 차단됨)";
-            }
-        };
+        // 엔진 상태 확인
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                const status = document.getElementById('libStatus');
+                if (window.crossOriginIsolated) {
+                    status.innerText = "Secure Context: AI Active";
+                    status.classList.replace('text-yellow-400', 'text-green-500');
+                } else {
+                    status.innerText = "Reloading for AI Access...";
+                    // 일부 브라우저에서 자동 새로고침이 필요할 수 있음
+                }
+            }, 1000);
+        });
 
         fileInput.onchange = (e) => {
             fileQueue = Array.from(e.target.files);
@@ -79,7 +86,7 @@
 
         function loadCurrent() {
             currentRawFile = fileQueue[currentIndex];
-            document.getElementById('fileProgress').innerText = `진행: ${currentIndex + 1} / ${fileQueue.length}`;
+            document.getElementById('fileProgress').innerText = `BATCH: ${currentIndex + 1} / ${fileQueue.length}`;
             document.getElementById('fileName').value = currentRawFile.name.split('.')[0];
             const reader = new FileReader();
             reader.onload = (ev) => setupCropper(ev.target.result);
@@ -98,12 +105,12 @@
         }
 
         document.getElementById('removeBgBtn').onclick = async () => {
-            if (typeof imglyRemoveBackground === 'undefined') {
-                alert("브라우저 보안 설정으로 인해 AI 엔진을 불러오지 못했습니다. 추적 방지 설정을 완화해주세요.");
+            if (!window.crossOriginIsolated) {
+                alert("브라우저가 보안 환경을 준비 중입니다. 잠시 후 다시 시도하거나 페이지를 새로고침 해주세요.");
                 return;
             }
             const btn = document.getElementById('btnText');
-            btn.innerText = "처리 중...";
+            btn.innerText = "분석 중...";
             document.getElementById('loadingSpinner').classList.remove('hidden');
             
             try {
@@ -156,6 +163,7 @@
 
         function drawText(ctx, text) {
             let sz = 32; ctx.font = `bold ${sz}px Impact, sans-serif`;
+            // 자동 폰트 크기 조절 로직
             while(ctx.measureText(text).width > 230 && sz > 10) ctx.font = `bold ${--sz}px Impact, sans-serif`;
             ctx.textAlign = 'center'; ctx.fillStyle = 'black';
             [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(o => ctx.fillText(text, 130+o[0], 280+o[1]));
