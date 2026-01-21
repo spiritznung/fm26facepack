@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>FM2026 HQ Tool - Stability Fix</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/bundle.js" onerror="console.error('AI Library Load Failed')"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        canvas { border-radius: 35px; background: transparent; image-rendering: -webkit-optimize-contrast; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #22c55e; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="h-screen flex p-6 gap-6 overflow-hidden">
+
+    <div class="glass-panel w-80 p-6 rounded-2xl flex flex-col gap-4 overflow-y-auto">
+        <div class="text-center mb-2">
+            <h1 class="text-2xl font-black text-green-500 italic">FM2026 HQ</h1>
+            <p id="libStatus" class="text-[10px] text-red-400 mt-1 uppercase font-bold text-center">AI 로딩 확인 중...</p>
+        </div>
+
+        <div class="space-y-3">
+            <input type="file" id="fileInput" class="hidden" accept="image/*" multiple>
+            <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold transition-all text-sm shadow-lg">1. 사진 불러오기</button>
+            
+            <button id="removeBgBtn" class="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-bold transition-all text-sm flex justify-center items-center gap-2">
+                <span id="btnText">2. 배경 제거 (AI)</span>
+                <div id="loadingSpinner" class="loader hidden"></div>
+            </button>
+
+            <p id="fileProgress" class="text-center text-[10px] text-gray-400 font-bold uppercase">Ready</p>
+            <input type="text" id="playerName" placeholder="선수 이름" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none uppercase text-sm font-bold">
+            <input type="text" id="fileName" placeholder="파일명 (ID)" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none text-sm font-bold">
+        </div>
+
+        <div class="space-y-4 pt-2">
+            <div><label class="flex justify-between text-[11px] font-bold mb-1"><span>밝기</span><span id="v-bright">100%</span></label><input type="range" id="bright" min="50" max="150" value="100" class="w-full"></div>
+            <div><label class="flex justify-between text-[11px] font-bold mb-1 text-green-400"><span>선명도</span><span id="v-sharpen">0%</span></label><input type="range" id="sharpen" min="0" max="100" value="0" class="w-full"></div>
+        </div>
+
+        <button id="nextBtn" class="mt-auto bg-green-600 hover:bg-green-700 py-4 rounded-xl font-black text-lg shadow-xl">저장 및 다음</button>
+    </div>
+
+    <div class="flex-1 flex flex-col md:flex-row items-center justify-around glass-panel rounded-3xl p-8 gap-8">
+        <div id="cropWrapper" class="w-full max-w-lg aspect-square bg-black/50 rounded-xl overflow-hidden shadow-2xl border border-gray-800 flex items-center justify-center text-gray-500 italic">사진을 선택해주세요.</div>
+        <canvas id="outCanvas" width="260" height="310"></canvas>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const playerNameInput = document.getElementById('playerName');
+        const canvas = document.getElementById('outCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        let fileQueue = [];
+        let currentIndex = -1;
+        let cropper;
+        let currentRawFile;
+
+        // 라이브러리 로드 체크
+        window.onload = () => {
+            const status = document.getElementById('libStatus');
+            if (typeof imglyRemoveBackground !== 'undefined') {
+                status.innerText = "AI ENGINE ONLINE";
+                status.classList.replace('text-red-400', 'text-green-500');
+            } else {
+                status.innerText = "AI ENGINE OFFLINE (브라우저 차단됨)";
+            }
+        };
+
+        fileInput.onchange = (e) => {
+            fileQueue = Array.from(e.target.files);
+            if (fileQueue.length > 0) { currentIndex = 0; loadCurrent(); }
+        };
+
+        function loadCurrent() {
+            currentRawFile = fileQueue[currentIndex];
+            document.getElementById('fileProgress').innerText = `진행: ${currentIndex + 1} / ${fileQueue.length}`;
+            document.getElementById('fileName').value = currentRawFile.name.split('.')[0];
+            const reader = new FileReader();
+            reader.onload = (ev) => setupCropper(ev.target.result);
+            reader.readAsDataURL(currentRawFile);
+        }
+
+        function setupCropper(url) {
+            const wrapper = document.getElementById('cropWrapper');
+            wrapper.innerHTML = `<img id="tgt" src="${url}" style="max-width:100%;">`;
+            if(cropper) cropper.destroy();
+            cropper = new Cropper(document.getElementById('tgt'), {
+                aspectRatio: 260/310, viewMode: 1,
+                ready() { render(); }
+            });
+            document.getElementById('tgt').addEventListener('crop', render);
+        }
+
+        document.getElementById('removeBgBtn').onclick = async () => {
+            if (typeof imglyRemoveBackground === 'undefined') {
+                alert("브라우저 보안 설정으로 인해 AI 엔진을 불러오지 못했습니다. 추적 방지 설정을 완화해주세요.");
+                return;
+            }
+            const btn = document.getElementById('btnText');
+            btn.innerText = "처리 중...";
+            document.getElementById('loadingSpinner').classList.remove('hidden');
+            
+            try {
+                const blob = await imglyRemoveBackground.removeBackground(currentRawFile);
+                const url = URL.createObjectURL(blob);
+                currentRawFile = blob;
+                setupCropper(url);
+            } catch (e) {
+                alert("배경 제거 중 오류 발생. 이미지를 확인해주세요.");
+            } finally {
+                btn.innerText = "2. 배경 제거 (AI)";
+                document.getElementById('loadingSpinner').classList.add('hidden');
+            }
+        };
+
+        function render() {
+            if (!cropper) return;
+            const cropped = cropper.getCroppedCanvas({ width: 260, height: 310 });
+            ctx.clearRect(0, 0, 260, 310);
+            ctx.save();
+            roundRect(ctx, 35);
+            ctx.clip();
+            ctx.drawImage(cropped, 0, 0);
+            ctx.restore();
+
+            const b = document.getElementById('bright').value / 100;
+            const s = document.getElementById('sharpen').value / 100;
+            let id = ctx.getImageData(0, 0, 260, 310);
+            for(let i=0; i<id.data.length; i+=4) if(id.data[i+3]>0) { id.data[i]*=b; id.data[i+1]*=b; id.data[i+2]*=b; }
+            if(s>0) id = applySharp(id, s);
+            ctx.putImageData(id, 0, 0);
+            
+            const name = playerNameInput.value.toUpperCase();
+            if(name) drawText(ctx, name);
+        }
+
+        function applySharp(id, a) {
+            const w=id.width, h=id.height, src=id.data, out=ctx.createImageData(w,h), dst=out.data;
+            const k = [0, -a, 0, -a, 1+4*a, -a, 0, -a, 0];
+            for(let y=1; y<h-1; y++) for(let x=1; x<w-1; x++) {
+                const i = (y*w+x)*4;
+                for(let j=0; j<3; j++) {
+                    let r = src[((y-1)*w+x)*4+j]*k[1] + src[(y*w+x-1)*4+j]*k[3] + src[i+j]*k[4] + src[(y*w+x+1)*4+j]*k[5] + src[((y+1)*w+x)*4+j]*k[7];
+                    dst[i+j] = Math.min(255, Math.max(0, r));
+                }
+                dst[i+3] = src[i+3];
+            }
+            return out;
+        }
+
+        function drawText(ctx, text) {
+            let sz = 32; ctx.font = `bold ${sz}px Impact, sans-serif`;
+            while(ctx.measureText(text).width > 230 && sz > 10) ctx.font = `bold ${--sz}px Impact, sans-serif`;
+            ctx.textAlign = 'center'; ctx.fillStyle = 'black';
+            [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(o => ctx.fillText(text, 130+o[0], 280+o[1]));
+            const g = ctx.createLinearGradient(0, 250, 0, 280);
+            g.addColorStop(0, '#FFEBAA'); g.addColorStop(1, '#8A6D3B');
+            ctx.fillStyle = g; ctx.fillText(text, 130, 280);
+        }
+
+        function roundRect(ctx, r) {
+            ctx.beginPath(); ctx.moveTo(r, 0); ctx.arcTo(260,0,260,310,r); ctx.arcTo(260,310,0,310,r); ctx.arcTo(0,310,0,0,r); ctx.arcTo(0,0,260,0,r); ctx.closePath();
+        }
+
+        document.getElementById('nextBtn').onclick = () => {
+            const l = document.createElement('a');
+            l.download = `${document.getElementById('fileName').value}.png`;
+            l.href = canvas.toDataURL(); l.click();
+            if(++currentIndex < fileQueue.length) loadCurrent();
+        };
+
+        ['playerName','bright','sharpen'].forEach(id => document.getElementById(id).oninput = () => {
+            if(id!=='playerName') document.getElementById(`v-${id}`).innerText = `${document.getElementById(id).value}%`;
+            render();
+        });
+    </script>
+</body>
+</html>
