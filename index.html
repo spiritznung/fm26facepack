@@ -2,12 +2,10 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>FM2026 HQ Portrait Tool - GitHub Version</title>
-    <script src="coi-serviceworker.js"></script>
-    
+    <title>FM2026 Pro Portrait Tool - Stable</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
     <style>
         body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
         .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
@@ -23,34 +21,36 @@
     <div class="glass-panel w-80 p-6 rounded-2xl flex flex-col gap-4 overflow-y-auto">
         <div class="text-center mb-2">
             <h1 class="text-2xl font-black text-green-500 italic uppercase">FM2026 HQ</h1>
-            <p id="libStatus" class="text-[10px] text-yellow-400 mt-1 uppercase font-bold text-center">Engine Initializing...</p>
+            <p id="libStatus" class="text-[10px] text-green-500 mt-1 uppercase font-bold">Engine Online</p>
         </div>
 
         <div class="space-y-3">
             <input type="file" id="fileInput" class="hidden" accept="image/*" multiple>
-            <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold text-sm shadow-lg">1. 사진 불러오기</button>
+            <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold text-sm shadow-lg transition-all">1. 사진 불러오기</button>
             
-            <button id="removeBgBtn" class="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-bold text-sm flex justify-center items-center gap-2">
+            <button id="removeBgBtn" class="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-bold text-sm flex justify-center items-center gap-2 shadow-lg transition-all">
                 <span id="btnText">2. 배경 제거 (AI)</span>
                 <div id="loadingSpinner" class="loader hidden"></div>
             </button>
 
-            <p id="fileProgress" class="text-center text-[10px] text-gray-400 font-bold uppercase">Ready</p>
+            <p id="fileProgress" class="text-center text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Ready</p>
             <input type="text" id="playerName" placeholder="선수 이름" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none uppercase text-sm font-bold">
             <input type="text" id="fileName" placeholder="파일명 (ID)" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none text-sm font-bold">
         </div>
 
         <div class="space-y-4 pt-2">
-            <div><label class="flex justify-between text-[11px] font-bold mb-1"><span>밝기</span><span id="v-bright">100%</span></label><input type="range" id="bright" min="50" max="150" value="100" class="w-full"></div>
-            <div><label class="flex justify-between text-[11px] font-bold mb-1 text-green-400"><span>선명도 (HD)</span><span id="v-sharpen">0%</span></label><input type="range" id="sharpen" min="0" max="100" value="0" class="w-full"></div>
+            <div><label class="flex justify-between text-[11px] font-bold mb-1"><span>밝기 (Brightness)</span><span id="v-bright">100%</span></label><input type="range" id="bright" min="50" max="150" value="100" class="w-full"></div>
+            <div><label class="flex justify-between text-[11px] font-bold mb-1 text-green-400"><span>선명도 (HD Sharpen)</span><span id="v-sharpen">0%</span></label><input type="range" id="sharpen" min="0" max="100" value="0" class="w-full"></div>
         </div>
 
-        <button id="nextBtn" class="mt-auto bg-green-600 hover:bg-green-700 py-4 rounded-xl font-black text-lg shadow-xl">저장 및 다음</button>
+        <button id="nextBtn" class="mt-auto bg-green-600 hover:bg-green-700 py-4 rounded-xl font-black text-lg shadow-xl transition-all">저장 및 다음</button>
     </div>
 
     <div class="flex-1 flex flex-col md:flex-row items-center justify-around glass-panel rounded-3xl p-8 gap-8">
-        <div id="cropWrapper" class="w-full max-w-lg aspect-square bg-black/50 rounded-xl overflow-hidden shadow-2xl border border-gray-800 flex items-center justify-center text-gray-500 italic">이미지를 선택하세요.</div>
-        <canvas id="outCanvas" width="260" height="310"></canvas>
+        <div id="cropWrapper" class="w-full max-w-lg aspect-square bg-black/30 rounded-xl overflow-hidden shadow-2xl border border-gray-800 flex items-center justify-center text-gray-500 italic">이미지를 선택하세요.</div>
+        <div class="relative">
+            <canvas id="outCanvas" width="260" height="310"></canvas>
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
@@ -63,21 +63,14 @@
         let fileQueue = [];
         let currentIndex = -1;
         let cropper;
-        let currentRawFile;
+        let originalImage = null;
 
-        // 엔진 상태 확인
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                const status = document.getElementById('libStatus');
-                if (window.crossOriginIsolated) {
-                    status.innerText = "Secure Context: AI Active";
-                    status.classList.replace('text-yellow-400', 'text-green-500');
-                } else {
-                    status.innerText = "Reloading for AI Access...";
-                    // 일부 브라우저에서 자동 새로고침이 필요할 수 있음
-                }
-            }, 1000);
+        // MediaPipe Selfie Segmentation 설정
+        const selfieSegmentation = new SelfieSegmentation({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
         });
+        selfieSegmentation.setOptions({ modelSelection: 1 });
+        selfieSegmentation.onResults(onResults);
 
         fileInput.onchange = (e) => {
             fileQueue = Array.from(e.target.files);
@@ -85,12 +78,21 @@
         };
 
         function loadCurrent() {
-            currentRawFile = fileQueue[currentIndex];
+            if (currentIndex >= fileQueue.length) return;
+            const file = fileQueue[currentIndex];
             document.getElementById('fileProgress').innerText = `BATCH: ${currentIndex + 1} / ${fileQueue.length}`;
-            document.getElementById('fileName').value = currentRawFile.name.split('.')[0];
+            document.getElementById('fileName').value = file.name.split('.')[0];
+            
             const reader = new FileReader();
-            reader.onload = (ev) => setupCropper(ev.target.result);
-            reader.readAsDataURL(currentRawFile);
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    setupCropper(img.src);
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
         }
 
         function setupCropper(url) {
@@ -104,27 +106,33 @@
             document.getElementById('tgt').addEventListener('crop', render);
         }
 
+        // 배경 제거 실행
         document.getElementById('removeBgBtn').onclick = async () => {
-            if (!window.crossOriginIsolated) {
-                alert("브라우저가 보안 환경을 준비 중입니다. 잠시 후 다시 시도하거나 페이지를 새로고침 해주세요.");
-                return;
-            }
-            const btn = document.getElementById('btnText');
-            btn.innerText = "분석 중...";
+            if (!originalImage) return;
+            document.getElementById('btnText').innerText = "분석 중...";
             document.getElementById('loadingSpinner').classList.remove('hidden');
-            
-            try {
-                const blob = await imglyRemoveBackground.removeBackground(currentRawFile);
-                const url = URL.createObjectURL(blob);
-                currentRawFile = blob;
-                setupCropper(url);
-            } catch (e) {
-                alert("배경 제거 중 오류 발생. 이미지를 확인해주세요.");
-            } finally {
-                btn.innerText = "2. 배경 제거 (AI)";
-                document.getElementById('loadingSpinner').classList.add('hidden');
-            }
+            await selfieSegmentation.send({ image: originalImage });
         };
+
+        function onResults(results) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = originalImage.width;
+            tempCanvas.height = originalImage.height;
+            const tCtx = tempCanvas.getContext('2d');
+
+            // 배경 제거 로직
+            tCtx.save();
+            tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.drawImage(results.segmentationMask, 0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.globalCompositeOperation = 'source-in';
+            tCtx.drawImage(results.image, 0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.restore();
+
+            setupCropper(tempCanvas.toDataURL());
+            
+            document.getElementById('btnText').innerText = "2. 배경 제거 (AI)";
+            document.getElementById('loadingSpinner').classList.add('hidden');
+        }
 
         function render() {
             if (!cropper) return;
@@ -139,7 +147,9 @@
             const b = document.getElementById('bright').value / 100;
             const s = document.getElementById('sharpen').value / 100;
             let id = ctx.getImageData(0, 0, 260, 310);
-            for(let i=0; i<id.data.length; i+=4) if(id.data[i+3]>0) { id.data[i]*=b; id.data[i+1]*=b; id.data[i+2]*=b; }
+            for(let i=0; i<id.data.length; i+=4) {
+                if(id.data[i+3]>0) { id.data[i]*=b; id.data[i+1]*=b; id.data[i+2]*=b; }
+            }
             if(s>0) id = applySharp(id, s);
             ctx.putImageData(id, 0, 0);
             
@@ -163,7 +173,6 @@
 
         function drawText(ctx, text) {
             let sz = 32; ctx.font = `bold ${sz}px Impact, sans-serif`;
-            // 자동 폰트 크기 조절 로직
             while(ctx.measureText(text).width > 230 && sz > 10) ctx.font = `bold ${--sz}px Impact, sans-serif`;
             ctx.textAlign = 'center'; ctx.fillStyle = 'black';
             [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(o => ctx.fillText(text, 130+o[0], 280+o[1]));
@@ -190,4 +199,3 @@
     </script>
 </body>
 </html>
-
