@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>FM2026 HQ Portrait Tool - Ultra Compatible</title>
+    <title>FM2026 HQ Portrait Tool - Master Edition</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0"></script>
@@ -13,7 +13,7 @@
         canvas { border-radius: 35px; background: transparent; image-rendering: -webkit-optimize-contrast; }
         .cropper-view-box, .cropper-face { border-radius: 0; }
         input[type="range"] { accent-color: #22c55e; height: 6px; }
-        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #22c55e; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #22c55e; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -22,33 +22,43 @@
     <div class="glass-panel w-80 p-6 rounded-2xl flex flex-col gap-4 overflow-y-auto">
         <div class="text-center mb-2">
             <h1 class="text-2xl font-black text-green-500 italic uppercase">FM2026 HQ</h1>
-            <p id="libStatus" class="text-[10px] text-yellow-500 mt-1 uppercase font-bold tracking-widest">Engine Loading...</p>
+            <p id="libStatus" class="text-[10px] text-yellow-500 mt-1 uppercase font-bold tracking-widest text-center">Engine Initializing...</p>
         </div>
 
         <div class="space-y-3">
             <input type="file" id="fileInput" class="hidden" accept="image/*" multiple>
             <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-bold text-sm shadow-lg">1. 사진 불러오기</button>
             <button id="removeBgBtn" disabled class="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-bold text-sm flex justify-center items-center gap-2 shadow-lg disabled:opacity-30">
-                <span id="btnText">2. 배경 제거 (AI)</span>
+                <span id="btnText">2. 고정밀 배경 제거</span>
                 <div id="loadingSpinner" class="loader hidden"></div>
             </button>
-            <p id="fileProgress" class="text-center text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Ready</p>
-            <input type="text" id="playerName" placeholder="선수 이름" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none uppercase text-sm font-bold">
-            <input type="text" id="fileName" placeholder="파일명 (ID)" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none text-sm font-bold">
         </div>
 
-        <div class="space-y-4 pt-2">
-            <div><label class="flex justify-between text-[11px] font-bold mb-1"><span>밝기 (Brightness)</span><span id="v-bright">100%</span></label><input type="range" id="bright" min="50" max="150" value="100" class="w-full"></div>
-            <div><label class="flex justify-between text-[11px] font-bold mb-1 text-green-400"><span>선명도 (HD Sharpen)</span><span id="v-sharpen">0%</span></label><input type="range" id="sharpen" min="0" max="100" value="0" class="w-full"></div>
+        <div class="space-y-4 border-t border-white/10 pt-4">
+            <div>
+                <label class="flex justify-between text-[11px] font-bold mb-1 text-purple-400"><span>제거 감도 (Threshold)</span><span id="v-threshold">0.7</span></label>
+                <input type="range" id="threshold" min="20" max="90" value="70" class="w-full">
+            </div>
+            <div>
+                <label class="flex justify-between text-[11px] font-bold mb-1 text-purple-400"><span>외곽선 부드럽게 (Smooth)</span><span id="v-blur">2px</span></label>
+                <input type="range" id="blur" min="0" max="10" value="2" class="w-full">
+            </div>
+        </div>
+
+        <div class="space-y-4 border-t border-white/10 pt-4">
+            <input type="text" id="playerName" placeholder="선수 이름" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none uppercase text-sm font-bold">
+            <input type="text" id="fileName" placeholder="파일명 (ID)" class="w-full bg-gray-900 border border-gray-700 p-3 rounded-lg focus:border-green-500 outline-none text-sm font-bold">
+            <div><label class="flex justify-between text-[11px] font-bold mb-1"><span>밝기</span><span id="v-bright">100%</span></label><input type="range" id="bright" min="50" max="150" value="100" class="w-full"></div>
+            <div><label class="flex justify-between text-[11px] font-bold mb-1 text-green-400"><span>선명도 (HD)</span><span id="v-sharpen">0%</span></label><input type="range" id="sharpen" min="0" max="100" value="0" class="w-full"></div>
         </div>
 
         <button id="nextBtn" class="mt-auto bg-green-600 hover:bg-green-700 py-4 rounded-xl font-black text-lg shadow-xl">저장 및 다음</button>
     </div>
 
     <div class="flex-1 flex flex-col md:flex-row items-center justify-around glass-panel rounded-3xl p-8 gap-8 relative">
-        <div id="loaderOverlay" class="absolute inset-0 bg-black/60 hidden z-50 flex items-center justify-center flex-col gap-4">
-            <div class="loader w-10 h-10"></div>
-            <p class="text-sm font-bold">인물 분석 중...</p>
+        <div id="loaderOverlay" class="absolute inset-0 bg-black/80 hidden z-50 flex items-center justify-center flex-col gap-4 rounded-3xl">
+            <div class="loader w-10 h-10 border-4"></div>
+            <p class="font-bold">AI가 인물과 배경을 분리하는 중입니다...</p>
         </div>
         <div id="cropWrapper" class="w-full max-w-lg aspect-square bg-black/30 rounded-xl overflow-hidden shadow-2xl border border-gray-800 flex items-center justify-center text-gray-500 italic">이미지를 선택하세요.</div>
         <canvas id="outCanvas" width="260" height="310"></canvas>
@@ -56,25 +66,23 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script>
-        const fileInput = document.getElementById('fileInput');
-        const playerNameInput = document.getElementById('playerName');
         const canvas = document.getElementById('outCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         let net = null;
         let cropper;
         let originalImage = null;
 
-        // [엔진 초기화] 저장소 에러를 피하기 위해 MobileNet 기반으로 가볍게 로드
         async function initBodyPix() {
             try {
+                // 고성능 설정을 사용하여 정밀도 향상
                 net = await bodyPix.load({
                     architecture: 'MobileNetV1',
                     outputStride: 16,
-                    multiplier: 0.75,
-                    quantBytes: 2
+                    multiplier: 1.0, // 정밀도 최대화
+                    quantBytes: 4    // 정밀도 향상
                 });
-                document.getElementById('libStatus').innerText = "ENGINE READY";
-                document.getElementById('libStatus').className = "text-[10px] text-green-500 mt-1 uppercase font-bold tracking-widest";
+                document.getElementById('libStatus').innerText = "ENGINE ONLINE (MASTER)";
+                document.getElementById('libStatus').className = "text-[10px] text-green-500 mt-1 uppercase font-bold tracking-widest text-center";
                 document.getElementById('removeBgBtn').disabled = false;
             } catch (err) {
                 document.getElementById('libStatus').innerText = "ENGINE ERROR";
@@ -84,8 +92,8 @@
         initBodyPix();
 
         fileInput.onchange = (e) => {
-            const fileQueue = Array.from(e.target.files);
-            if (fileQueue.length > 0) loadFile(fileQueue[0]);
+            const files = Array.from(e.target.files);
+            if (files.length > 0) loadFile(files[0]);
         };
 
         function loadFile(file) {
@@ -109,14 +117,17 @@
             document.getElementById('tgt').addEventListener('crop', render);
         }
 
-        // [배경 제거] 저장소 접근 없이 메모리 상에서 처리
         document.getElementById('removeBgBtn').onclick = async () => {
             if (!originalImage || !net) return;
             document.getElementById('loaderOverlay').classList.remove('hidden');
             
+            const thresh = document.getElementById('threshold').value / 100;
+            const blurVal = parseInt(document.getElementById('blur').value);
+
+            // 고정밀 분석 실행
             const segmentation = await net.segmentPerson(originalImage, {
-                internalResolution: 'medium',
-                segmentationThreshold: 0.7
+                internalResolution: 'high', // 고해상도 분석
+                segmentationThreshold: thresh
             });
 
             const tempCanvas = document.createElement('canvas');
@@ -124,23 +135,51 @@
             tempCanvas.height = originalImage.height;
             const tCtx = tempCanvas.getContext('2d');
             
-            tCtx.drawImage(originalImage, 0, 0);
-            const imgData = tCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            const data = imgData.data;
+            // 1. 마스크 생성
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = tempCanvas.width;
+            maskCanvas.height = tempCanvas.height;
+            const mCtx = maskCanvas.getContext('2d');
+            const maskImg = mCtx.createImageData(maskCanvas.width, maskCanvas.height);
 
             for (let i = 0; i < segmentation.data.length; i++) {
-                if (segmentation.data[i] === 0) { // 배경일 경우 투명화
-                    data[i * 4 + 3] = 0;
-                }
+                const val = segmentation.data[i] === 1 ? 255 : 0;
+                maskImg.data[i * 4] = val;
+                maskImg.data[i * 4 + 1] = val;
+                maskImg.data[i * 4 + 2] = val;
+                maskImg.data[i * 4 + 3] = val;
             }
-            tCtx.putImageData(imgData, 0, 0);
+            mCtx.putImageData(maskImg, 0, 0);
+
+            // 2. 마스크 부드럽게 처리 (페더링 핵심)
+            tCtx.save();
+            if (blurVal > 0) tCtx.filter = `blur(${blurVal}px)`;
+            tCtx.drawImage(maskCanvas, 0, 0);
+            tCtx.restore();
+
+            // 3. 원본 합성 (Destination-In)
+            tCtx.globalCompositeOperation = 'source-in';
+            tCtx.drawImage(originalImage, 0, 0);
+
             setupCropper(tempCanvas.toDataURL());
             document.getElementById('loaderOverlay').classList.add('hidden');
         };
 
+        // UI 이벤트 바인딩
+        ['threshold', 'blur', 'playerName', 'bright', 'sharpen'].forEach(id => {
+            document.getElementById(id).oninput = (e) => {
+                const vId = `v-${id}`;
+                if (document.getElementById(vId)) {
+                    document.getElementById(vId).innerText = (id === 'threshold') ? (e.target.value / 100) : (id === 'blur' ? e.target.value + 'px' : e.target.value + '%');
+                }
+                render();
+            };
+        });
+
+        // (기존 render, applySharp, drawText 로직 유지)
         function render() {
             if (!cropper) return;
-            const cropped = cropper.getCroppedCanvas({ width: 260, height: 310 });
+            const cropped = cropper.getCroppedCanvas({ width: 260, height: 310, imageSmoothingQuality: 'high' });
             ctx.clearRect(0, 0, 260, 310);
             ctx.save();
             drawRoundRect(ctx, 35); ctx.clip();
@@ -150,11 +189,11 @@
             const b = document.getElementById('bright').value / 100;
             const s = document.getElementById('sharpen').value / 100;
             let id = ctx.getImageData(0, 0, 260, 310);
-            for(let i=0; i<id.data.length; i+=4) if(id.data[i+3]>0) { id.data[i]*=b; id.data[i+1]*=b; id.data[i+2]*=b; }
+            for(let i=0; i<id.data.length; i+=4) if(id.data[i+3]>10) { id.data[i]*=b; id.data[i+1]*=b; id.data[i+2]*=b; }
             if(s>0) id = applySharp(id, s);
             ctx.putImageData(id, 0, 0);
             
-            const name = playerNameInput.value.toUpperCase();
+            const name = document.getElementById('playerName').value.toUpperCase();
             if(name) drawText(ctx, name);
         }
 
@@ -176,7 +215,7 @@
             let sz = 32; ctx.font = `bold ${sz}px Impact, sans-serif`;
             while(ctx.measureText(text).width > 230 && sz > 10) ctx.font = `bold ${--sz}px Impact, sans-serif`;
             ctx.textAlign = 'center'; ctx.fillStyle = 'black';
-            [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(o => ctx.fillText(text, 130+o[0], 280+o[1]));
+            [[-1,-1],[1,-1],[-1,1],[1,1],[0,-1],[0,1],[-1,0],[1,0]].forEach(o => ctx.fillText(text, 130+o[0], 280+o[1]));
             const g = ctx.createLinearGradient(0, 250, 0, 280);
             g.addColorStop(0, '#FFEBAA'); g.addColorStop(1, '#8A6D3B');
             ctx.fillStyle = g; ctx.fillText(text, 130, 280);
@@ -189,13 +228,8 @@
         document.getElementById('nextBtn').onclick = () => {
             const l = document.createElement('a');
             l.download = `${document.getElementById('fileName').value}.png`;
-            l.href = canvas.toDataURL(); l.click();
+            l.href = canvas.toDataURL('image/png', 1.0); l.click();
         };
-
-        ['playerName','bright','sharpen'].forEach(id => document.getElementById(id).oninput = () => {
-            if(id!=='playerName') document.getElementById(`v-${id}`).innerText = `${document.getElementById(id).value}%`;
-            render();
-        });
     </script>
 </body>
 </html>
